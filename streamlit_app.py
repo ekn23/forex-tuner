@@ -4,10 +4,12 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 
+# Paths
 STRATEGY_DIR = os.path.expanduser("~/manual_autogpt/forex_tuner/strategies")
 OUTPUT_DIR = os.path.expanduser("~/manual_autogpt/forex_tuner/output")
 DATA_DIR = os.path.expanduser("~/manual_autogpt/forex_tuner/data")
 
+# Layout
 st.set_page_config(page_title="Forex Strategy Tuner", layout="wide")
 st.title("📊 Forex Strategy Tuner Dashboard")
 
@@ -29,13 +31,13 @@ selected_strategy = st.sidebar.selectbox("Choose a strategy", strategy_files)
 if selected_strategy and st.sidebar.button("❌ Delete Strategy"):
     os.remove(os.path.join(STRATEGY_DIR, selected_strategy))
     st.sidebar.success(f"Deleted: {selected_strategy}")
-    st.experimental_rerun()
+    st.rerun()
 
 # --- Symbol Picker ---
 symbols = sorted(set(f.split("_")[0] for f in os.listdir(DATA_DIR) if f.endswith(".csv")))
 selected_symbol = st.sidebar.selectbox("📈 Symbol to Backtest", symbols)
 
-# --- View/Edit Source Code ---
+# --- View/Edit Strategy Code ---
 if selected_strategy:
     st.subheader(f"🧠 Strategy Source: `{selected_strategy}`")
     code_path = os.path.join(STRATEGY_DIR, selected_strategy)
@@ -60,52 +62,28 @@ if selected_strategy and selected_symbol and st.button("🚀 Run Backtest"):
             st.error("❌ Backtest failed")
             st.text_area("Error", e.output.decode(), height=300)
 
-# --- Results Viewer ---
+# --- Show Backtest Results ---
 if selected_strategy and selected_symbol:
     result_file = os.path.join(OUTPUT_DIR, selected_strategy.replace(".py", "") + "_results.csv")
     if os.path.exists(result_file):
         df = pd.read_csv(result_file)
-
-        # Filter by symbol (if symbol column exists)
-        if "symbol" in df.columns:
-            df = df[df["symbol"] == selected_symbol]
+        df_filtered = df[df["symbol"] == selected_symbol]
 
         st.subheader("📈 Backtest Results Table")
+        st.dataframe(df_filtered)
 
-        # New Filters
-        col1, col2, col3 = st.columns(3)
-        min_win_rate = col1.slider("Min Win Rate", 0.0, 1.0, 0.5, 0.01)
-        max_drawdown = col2.slider("Max Drawdown", -100.0, 0.0, -50.0, 1.0)
-        sort_metric = col3.selectbox("Sort By", ["net_profit", "win_rate", "max_drawdown"])
-
-        df_filtered = df[(df["win_rate"] >= min_win_rate) & (df["max_drawdown"] >= max_drawdown)]
-        df_sorted = df_filtered.sort_values(by=sort_metric, ascending=False)
-
-        st.dataframe(df_sorted.head(10), use_container_width=True)
-
-        # Show best result summary
-        if not df_sorted.empty:
-            st.subheader("📌 Best Result Summary")
-            best = df_sorted.iloc[0]
-            st.json(best.to_dict())
-
-        # Profit bar chart (if profit column exists)
-        if "profit" in df_sorted.columns and not df_sorted.empty:
+        if "profit" in df_filtered.columns and not df_filtered.empty:
             st.subheader("📊 Profit Chart")
             fig, ax = plt.subplots(figsize=(10, 4))
+            df_sorted = df_filtered.sort_values("profit", ascending=False)
             ax.bar(df_sorted.index.astype(str), df_sorted["profit"], color="green")
             ax.set_ylabel("Profit")
             ax.set_xlabel("Combo #")
             ax.set_title("Profit by Parameter Set")
             st.pyplot(fig)
 
-        # Download CSV
-        st.download_button(
-            "📥 Download Full Results",
-            data=df.to_csv(index=False),
-            file_name=os.path.basename(result_file),
-            mime="text/csv"
-        )
+        # --- Download Button ---
+        with open(result_file, "rb") as f:
+            st.download_button("📥 Download Results CSV", f, file_name=os.path.basename(result_file), mime="text/csv")
     else:
-        st.info("Run a backtest to see results.")
-
+        st.info("ℹ️ Run a backtest to see results.")

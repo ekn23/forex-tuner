@@ -1,3 +1,6 @@
+# FULL PLUG-AND-PLAY: Updated `rci_strategy.py` that returns trade log
+# Save this as ~/manual_autogpt/forex_tuner/strategies/rci_strategy.py
+
 import pandas as pd
 import numpy as np
 import os
@@ -18,11 +21,22 @@ def ma(series, length, ma_type="SMA"):
 
 def run_strategy(symbol, params):
     filepath = f"data/{symbol}_Candlestick_5_M_BID_26.04.2023-26.04.2025.csv"
-
     if not os.path.exists(filepath):
         raise FileNotFoundError(f"Data file not found: {filepath}")
+    
+    m5_df = pd.read_csv(filepath).head(5000)
+    m5_df.columns = [col.lower().strip() for col in m5_df.columns]
 
-    m5_df = pd.read_csv(filepath)
+    if 'close' not in m5_df.columns:
+        candidates = [c for c in m5_df.columns if 'close' in c]
+        if not candidates:
+            raise KeyError("No 'close' column found in data.")
+        m5_df['close'] = m5_df[candidates[0]]
+
+    if 'timestamp' in m5_df.columns:
+        m5_df['timestamp'] = m5_df['timestamp'].str.replace(r" GMT[-+]\d+", "", regex=True)
+        m5_df.index = pd.to_datetime(m5_df['timestamp'], format='%d.%m.%Y %H:%M:%S.%f', errors='coerce')
+        m5_df = m5_df.dropna(subset=['timestamp'])
 
     rci_len = params.get("rci_length", 10)
     ma_len = params.get("ma_length", 14)
@@ -30,12 +44,6 @@ def run_strategy(symbol, params):
     initial_balance = 400
     lot_size = 0.01
 
-    # Parse timestamp
-    if 'timestamp' in m5_df.columns:
-        m5_df['timestamp'] = m5_df['timestamp'].str.replace(r" GMT[-+]\d+", "", regex=True)
-        m5_df.index = pd.to_datetime(m5_df['timestamp'], format='%d.%m.%Y %H:%M:%S.%f')
-
-    # Calculate RCI & MA
     rci_series = [rci(m5_df['close'].iloc[i - rci_len:i], rci_len) for i in range(rci_len, len(m5_df))]
     m5_df = m5_df.iloc[rci_len:].copy()
     m5_df["RCI"] = rci_series
@@ -71,11 +79,10 @@ def run_strategy(symbol, params):
                 equity += profit
                 position = None
 
-    # Analyze results
     total_trades = len(trades)
     net_profit = sum(t['profit'] for t in trades)
     wins = [t for t in trades if t['profit'] > 0]
-    win_rate = len(wins) / total_trades if total_trades > 0 else 0
+    win_rate = len(wins) / total_trades if total_trades else 0
     drawdowns = [t['profit'] for t in trades if t['profit'] < 0]
     max_drawdown = min(drawdowns) if drawdowns else 0
 
@@ -84,6 +91,7 @@ def run_strategy(symbol, params):
         "net_profit": net_profit,
         "win_rate": win_rate,
         "max_drawdown": max_drawdown,
-        "symbol": symbol
+        "symbol": symbol,
+        "trade_log": trades
     }
 
