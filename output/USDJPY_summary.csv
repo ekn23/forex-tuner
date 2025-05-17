@@ -1,0 +1,5 @@
+Parameters,Total Trades,Net Profit,Win Rate,Max Drawdown
+"{'ma_type': 'SMA', 'ma_length': 20, 'osc_length': 10, 'osc_threshold': 0.3, 'pivot_left': 3, 'pivot_right': 3, 'volatility_threshold': 2, 'entry_mode': 'both', 'retest_enabled': True}",49,0.14700000000209457,100,0
+"{'ma_type': 'SMA', 'ma_length': 50, 'osc_length': 10, 'osc_threshold': 0.3, 'pivot_left': 3, 'pivot_right': 3, 'volatility_threshold': 2, 'entry_mode': 'both', 'retest_enabled': True}",49,0.14700000000209457,100,0
+"{'ma_type': 'EMA', 'ma_length': 20, 'osc_length': 10, 'osc_threshold': 0.3, 'pivot_left': 3, 'pivot_right': 3, 'volatility_threshold': 2, 'entry_mode': 'both', 'retest_enabled': True}",49,0.14700000000209457,100,0
+"{'ma_type': 'EMA', 'ma_length': 50, 'osc_length': 10, 'osc_threshold': 0.3, 'pivot_left': 3, 'pivot_right': 3, 'volatility_threshold': 2, 'entry_mode': 'both', 'retest_enabled': True}",49,0.14700000000209457,100,0
