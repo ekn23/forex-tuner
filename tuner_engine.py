@@ -1,48 +1,85 @@
-import itertools
-import time
-import traceback
+import os
 import pandas as pd
-from strategies import get_strategy_config, run_backtest
+import numpy as np
+from strategies import get_strategy_config
+import matplotlib.pyplot as plt
+from itertools import product
 
-def run_parameter_sweep(strategy_name, symbol="EURUSD"):
-    try:
-        config = get_strategy_config(strategy_name)
-        param_grid = config["parameter_grid"]
-        combinations = list(itertools.product(*param_grid.values()))
+def run_backtest(strategy_runner, data_m5, data_m30, params):
+    result = strategy_runner(data_m5, data_m30, params)
+    trades = result["trades"]
+    equity = result["equity_curve"]
+    stats = result["stats"]
+    return trades, equity, stats
 
-        print(f"🧠 Total parameter combinations: {len(combinations)}")
+def run_parameter_sweep(strategy_name, symbol, data_path="data", output_path="output"):
+    config = get_strategy_config(strategy_name)
+    strategy_runner = config["runner"]
+    param_grid = config["params"]
 
-        results_list = []
-        start_time = time.time()
+    # Load data
+    m5_file = f"{symbol}_Candlestick_5_M_BID_26.04.2023-26.04.2025.csv"
+    m30_file = f"{symbol}_Candlestick_30_M_BID_26.04.2023-26.04.2025.csv"
 
-        for idx, combo in enumerate(combinations, 1):
-            combo_start = time.time()
-            params = dict(zip(param_grid.keys(), combo))
-            print(f"🔁 Running combo {idx}/{len(combinations)}: {params}")
+    m5_df = pd.read_csv(
+        os.path.join(data_path, m5_file),
+        parse_dates=["Local time"],
+        index_col="Local time",
+        dayfirst=True
+    ).head(5000)
 
-            try:
-                result = run_backtest(strategy_name, symbol, params)
-                full_result = {**params, **result}
-                results_list.append(full_result)
-                print(f"✅ Result: {result}")
-            except Exception as e:
-                print(f"❌ Failed on combo {params}: {e}")
-                traceback.print_exc()
+    m30_df = pd.read_csv(
+        os.path.join(data_path, m30_file),
+        parse_dates=["Local time"],
+        index_col="Local time",
+        dayfirst=True
+    ).head(2000)
 
-            elapsed = time.time() - combo_start
-            total_elapsed = time.time() - start_time
-            est_total = (total_elapsed / idx) * len(combinations)
-            est_remaining = est_total - total_elapsed
-            print(f"⏱ Combo took {round(elapsed, 2)}s — ETA: {round(est_remaining, 2)}s left\n")
+    keys, values = zip(*param_grid.items())
+    combos = [dict(zip(keys, v)) for v in product(*values)]
 
-        # ✅ Save all results to CSV
-        df = pd.DataFrame(results_list)
-        output_path = f"output/{strategy_name}_results.csv"
-        df.to_csv(output_path, index=False)
-        print(f"✅ All results saved to: {output_path}")
-        print(f"✅ Finished all {len(combinations)} combos in {round(time.time() - start_time, 2)} seconds")
+    summary = []
+    os.makedirs(output_path, exist_ok=True)
 
-    except Exception as e:
-        print(f"🔥 Error in run_parameter_sweep: {e}")
-        traceback.print_exc()
+    for i, combo in enumerate(combos):
+        print(f"🔁 Running combo {i+1}/{len(combos)}: {combo}")
+        try:
+            trades, equity, stats = run_backtest(strategy_runner, m5_df.copy(), m30_df.copy(), combo)
+
+            print(f"[DEBUG] Trades: {len(trades)} | Final Equity: {equity[-1] if equity else 'N/A'} | Net: {stats.get('net_profit', 0)}")
+
+            equity_series = pd.Series(equity)
+            equity_series.index = range(len(equity_series))
+
+            summary.append({
+                "Parameters": combo,
+                "Total Trades": stats.get("total_trades", 0),
+                "Net Profit": stats.get("net_profit", 0),
+                "Win Rate": stats.get("win_rate", 0),
+                "Max Drawdown": stats.get("max_drawdown", 0),
+            })
+
+            # Save equity chart
+            chart_filename = f"{symbol}_combo_{i+1}_equity.png"
+            chart_path = os.path.join(output_path, chart_filename)
+            print(f"[DEBUG] Saving chart to: {chart_path}")
+
+            plt.figure(figsize=(10, 4))
+            plt.plot(equity_series)
+            plt.title(f"Equity Curve - {symbol} - Combo {i+1}")
+            plt.xlabel("Trade #")
+            plt.ylabel("Equity ($)")
+            plt.grid(True)
+            plt.tight_layout()
+            plt.savefig(chart_path)
+            plt.close()
+
+        except Exception as e:
+            print(f"❌ Failed on combo {combo}: {e}")
+
+    # Save summary file
+    summary_df = pd.DataFrame(summary)
+    summary_csv = os.path.join(output_path, f"{symbol}_summary.csv")
+    print(f"[DEBUG] Saving summary to: {summary_csv}")
+    summary_df.to_csv(summary_csv, index=False)
 

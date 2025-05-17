@@ -1,40 +1,53 @@
-# breaker_pivot_ma_strategy.py
+strategy_name = "breaker_pivot_ma_strategy"
 
-import pandas as pd
-import os
+parameter_grid = {
+    "ma_type": ["SMA", "EMA"],
+    "ma_length": [20, 50],
+    "osc_length": [10],
+    "osc_threshold": [0.3],
+    "pivot_left": [3],
+    "pivot_right": [3],
+    "volatility_threshold": [2],
+    "entry_mode": ["both"],
+    "retest_enabled": [True]
+}
 
-def run_strategy(symbol, params):
-    # 🔹 Load your 5-minute candlestick CSV file
-    filepath = f"data/{symbol}_Candlestick_5_M_BID_26.04.2023-26.04.2025.csv"
-    
-    if not os.path.exists(filepath):
-        raise FileNotFoundError(f"Data file not found: {filepath}")
+def run_strategy(data_m5, data_m30, params):
+    # Example logic (simplified; replace with full logic if needed)
+    trades = []
+    equity_curve = []
+    balance = 400  # Start with $400
+    equity_curve.append(balance)
 
-    df = pd.read_csv(filepath).head(5000)  # You can adjust this to use more rows
+    for i in range(50, len(data_m5)):
+        close = data_m5['Close'].iloc[i]
+        open_price = close - 0.001
+        tp = close + 0.002
+        sl = close - 0.001
 
-    # 🔹 Extract parameters from the tuner
-    ma_type = params["ma_type"]
-    ma_length = params["ma_length"]
-    osc_length = params["osc_length"]
-    osc_threshold = params["osc_threshold"]
-    pivot_left = params["pivot_left"]
-    pivot_right = params["pivot_right"]
-    volatility_threshold = params["volatility_threshold"]
-    calc_window = params["calc_window"]
-    entry_mode = params["entry_mode"]
-    retest_enabled = params["retest_enabled"]
+        # Example: trigger on every 100th bar
+        if i % 100 == 0:
+            trades.append({
+                "entry_time": data_m5.index[i],
+                "entry_price": open_price,
+                "exit_time": data_m5.index[i+5] if i+5 < len(data_m5) else data_m5.index[-1],
+                "exit_price": tp,
+                "pnl": tp - open_price,
+                "direction": "long"
+            })
+            balance += tp - open_price
+        equity_curve.append(balance)
 
-    # 🔹 Placeholder example logic
-    # TODO: Replace this section with your actual strategy implementation
-    print(f"Running strategy with MA={ma_type}({ma_length}), Osc={osc_length}, Threshold={osc_threshold}")
-
-    # 🧪 Dummy results — replace these with real backtest stats
-    result = {
-        "total_trades": 35,
-        "net_profit": 421.55,
-        "win_rate": 0.62,
-        "max_drawdown": -45.12
+    stats = {
+        "total_trades": len(trades),
+        "net_profit": balance - 400,
+        "win_rate": 100 if trades else 0,
+        "max_drawdown": 0
     }
 
-    return result
+    return {
+        "trades": trades,
+        "equity_curve": equity_curve,
+        "stats": stats
+    }
 
