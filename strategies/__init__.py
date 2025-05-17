@@ -1,39 +1,29 @@
-from .breaker_pivot_ma_strategy import run_strategy as run_breaker_strategy
-from .rci_strategy import run_strategy as run_rci_strategy
+import importlib.util
+import os
 
-def get_strategy_config(strategy_name):
-    if strategy_name == "breaker_pivot_ma_strategy":
-        return {
-            "parameter_grid": {
-                "ma_type": ["SMA", "EMA"],
-                "ma_length": [10, 20, 30],
-                "osc_length": [5, 10],
-                "osc_threshold": [0.2, 0.3, 0.4],
-                "pivot_left": [3],
-                "pivot_right": [2],
-                "volatility_threshold": [1, 2],
-                "calc_window": [None],
-                "entry_mode": ["both"],
-                "retest_enabled": [True, False],
-            }
-        }
-    elif strategy_name == "rci_strategy":
-        return {
-            "parameter_grid": {
-                "rci_length": [9, 14, 21],
-                "threshold": [0.7, 0.8, 0.9],
-                "smoothing": [True, False],
-                "lookback_window": [20, 30],
-            }
-        }
-    else:
-        raise ValueError(f"Unknown strategy config: {strategy_name}")
+STRATEGY_FOLDER = os.path.dirname(__file__)
+strategy_registry = {}
 
-def run_backtest(strategy_name, symbol, params):
-    if strategy_name == "breaker_pivot_ma_strategy":
-        return run_breaker_strategy(symbol, params)
-    elif strategy_name == "rci_strategy":
-        return run_rci_strategy(symbol, params)
-    else:
-        raise ValueError(f"No backtest runner for: {strategy_name}")
+# Dynamically load each strategy
+for file in os.listdir(STRATEGY_FOLDER):
+    if file.endswith(".py") and file != "__init__.py":
+        path = os.path.join(STRATEGY_FOLDER, file)
+        spec = importlib.util.spec_from_file_location(file[:-3], path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        if hasattr(module, "strategy_name") and hasattr(module, "run_strategy") and hasattr(module, "parameter_grid"):
+            strategy_registry[module.strategy_name] = {
+                "run": module.run_strategy,
+                "params": module.parameter_grid
+            }
+
+def get_strategy_config(name):
+    if name in strategy_registry:
+        return {"parameter_grid": strategy_registry[name]["params"]}
+    raise ValueError(f"Unknown strategy config: {name}")
+
+def run_backtest(name, symbol, params):
+    if name in strategy_registry:
+        return strategy_registry[name]["run"](symbol, params)
+    raise ValueError(f"Unknown strategy logic: {name}")
 
